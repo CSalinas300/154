@@ -53,6 +53,9 @@ class Wait:
         for i in self.list:
             print(i)
 
+    def size(self):
+        return len(self.list)
+
 
 def generate(n):
     """
@@ -111,18 +114,22 @@ if __name__ == '__main__':
     '''How many total customers to process'''
     customers = 160
 
+    '''How many bank booths to use'''
+    booths = 10
+
     '''Add 160 customers to a queue'''
     q = generate(customers)
 
     '''Add 10 customers to a bank booth'''
-    add_n_banks(10, q)
+    add_n_banks(booths, q)
 
     '''Print the remaining customers in the queue'''
     q.print()
 
     val = "y"
-    while val != 'N':
-        add_n_banks(10, q)
+    while val != 'N' and q.size() != 0:
+        add_n_banks(booths, q)
         val = input("Continue? (Type N to stop): ")
         '''Print the remaining customers in the queue'''
         q.print()
+        print("Customers Remaining : ", q.size())
