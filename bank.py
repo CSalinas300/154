@@ -1,4 +1,7 @@
+import enum
 from queue import PriorityQueue
+import random
+
 from scipy.stats import rv_discrete
 from matplotlib import pyplot as plt
 
@@ -10,6 +13,10 @@ class Customer:
         self.id = name
 
 
+class BankState(enum.Enum):
+    Busy = 1
+    Idle = 0
+
 class Bank:
     """Bank model"""
 
@@ -20,13 +27,19 @@ class Bank:
         self.state = state
 
     def booth_available(self):
-        return self.state == "FREE"
+        return self.state == "IDLE"
 
-    def help_customer(self):
-        self.state = "WORKING"
+    def booth_busy(self):
+        return self.state == "BUSY"
+
+    def change_state(self, BankState):
+        self.state = BankState
+
+    def get_wu(self):
+        return self.speed
 
 
-class Wait:
+class CustomerList:
     """Priority Queue"""
 
     def __init__(self):
@@ -57,21 +70,57 @@ class Wait:
         return len(self.list)
 
 
-def generate(n):
+def generatePQ(n):
     """
-    :rtype: Wait
+    :rtype: CustomerList
     """
-    queue = Wait()
+    queue = CustomerList()
     for i in range(0, n):
         new_customer = Customer(i)
         queue.add_customer(new_customer)
     return queue
 
+def average_wait_time(q):
+    while q.size() != 0:
+        '''Wait time for each customer rush of 5-15'''
+        wait_time = 0
 
-def add_n_banks(n, queue):
-    for i in range(0, n):
-        bank = Bank(booth_id=n, Customer=queue.get_customer(), speed=10, state="FREE")
+        '''Total average wait time in 8 hours'''
+        total_average = 0
 
+        # 5 to 15 customers per run
+        customer_rush = random.randint(5, 15)
+        '''If we get more than 10 customers some have to wait longer for a slot to open up'''
+        if customer_rush > 10:
+            '''Initially add 10 customers to all the booths'''
+            booth_list = add_n_booths(10, q)
+            for n in range(0, booths):
+                '''Add the wait time for each booth speed (10)'''
+                wait_time += booth_list[n].speed
+            '''The remaining customers are in line'''
+            remaining_list = 10 - customer_rush
+            '''Add the remaining customers to the booths'''
+            booth_list = add_n_booths(remaining_list, q)
+            for n in range(0, remaining_list):
+                wait_time += booth_list[n].speed
+        else:
+            '''The rush of customers is less than our booth count so no problem'''
+            booth_list = add_n_booths(customer_rush, q)
+            for n in range(0, customer_rush):
+                wait_time += booth_list[n].speed
+        print("Average wait time: ", wait_time / booths, " minutes")
+        total_average += wait_time
+    print("Total average wait time in 8 hours: ", total_average/customers, " minutes")
+
+
+def add_n_booths(size, queue):
+    booth_list = []
+    for i in range(0, size):
+        '''Same worker unit for each bank is 10'''
+        wu = 10
+        booth = Bank(booth_id=i, Customer=queue.get_customer(), speed=wu, state=BankState.Busy)
+        booth_list.append(booth)
+    return booth_list
 
 def array_input():
     num_array = list()
@@ -111,25 +160,15 @@ def print_bye(name):
 
 
 if __name__ == '__main__':
-    '''How many total customers to process'''
+    '''How many total customers to process in a given (8 hour) day'''
     customers = 160
 
     '''How many bank booths to use'''
     booths = 10
 
-    '''Add 160 customers to a queue'''
-    q = generate(customers)
+    '''Add all customers to a queue'''
+    q = generatePQ(customers)
 
-    '''Add 10 customers to a bank booth'''
-    add_n_banks(booths, q)
+    '''Average waiting time for customers'''
+    average_wait_time(q)
 
-    '''Print the remaining customers in the queue'''
-    q.print()
-
-    val = "y"
-    while val != 'N' and q.size() != 0:
-        add_n_banks(booths, q)
-        val = input("Continue? (Type N to stop): ")
-        '''Print the remaining customers in the queue'''
-        q.print()
-        print("Customers Remaining : ", q.size())
