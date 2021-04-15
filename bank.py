@@ -188,11 +188,12 @@ def average_wait_time(pq, b, _booth_instance):
         # todo add waiting time to people in queue
         # print("Average wait time for ", b, "customers:", wait_time, "wu")
         # customers not served today
-        if total_average <= 80:
+        if total_average / b <= 80:
             question.customers_not_served_today = pq.size()
         if time_multiplier > start_multipler:
+            # todo fix this?
             if time_multiplier - start_multipler < 1:
-                total_average += wait_time * (time_multiplier - start_multipler)
+                total_average += wait_time * start_multipler
             else:
                 total_average += wait_time * start_multipler
             start_multipler += 1
