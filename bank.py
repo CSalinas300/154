@@ -379,7 +379,7 @@ if __name__ == '__main__':
 
     '''Generate events for all customers'''
     r = generate_priority_queue(s)
-    '''Average wait time with 9 booths'''
+    '''Average wait time with 160 booths'''
     print("Using 160 booths")
     question.wait_to_finish_booth_160 = average_wait_time(r, 160, booth_instance)
     wu_to_hours(question.wait_to_finish_booth_160)
