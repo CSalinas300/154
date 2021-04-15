@@ -175,7 +175,7 @@ def average_wait_time(pq, b, _booth_instance):
     # Total average wait time in 8 hours
     total_average = 0
     time_multiplier = pq.size() / b  # use for multiplying time
-    start_multipler = 1
+    start_multiplier = 1
     while pq.size() != 0:
         '''Wait time for each customer rush of 5-15'''
         wait_time = 0
@@ -188,15 +188,15 @@ def average_wait_time(pq, b, _booth_instance):
         # todo add waiting time to people in queue
         # print("Average wait time for ", b, "customers:", wait_time, "wu")
         # customers not served today
-        if total_average / b <= 80:
+        if total_average / b <= wu*8:
             question.customers_not_served_today = pq.size()
-        if time_multiplier > start_multipler:
+        if time_multiplier > start_multiplier:
             # todo fix this?
-            if time_multiplier - start_multipler < 1:
-                total_average += wait_time * start_multipler
+            if time_multiplier - start_multiplier < 1:
+                total_average += wait_time * start_multiplier
             else:
-                total_average += wait_time * start_multipler
-            start_multipler += 1
+                total_average += wait_time * start_multiplier
+            start_multiplier += 1
     print("\tTotal average wait time:", total_average / customers, "wu")
     question.total_time = total_average
     return total_average / customers
@@ -218,6 +218,7 @@ def get_dist_output():
 def process_customers(size, booth_list, qq):
     c_wu = 0
     b_wu = 0
+    open_booths = size
 
     while size != 0:
         for i in range(0, size):
@@ -230,16 +231,16 @@ def process_customers(size, booth_list, qq):
                 size -= 1  # subtract 1 from size
             else:
                 booth_list[i].change_state(BoothState.Idle)
-    return b_wu + c_wu  # return the sum of booth wu + customer wu
+    return b_wu + c_wu / open_booths  # return the sum of (booth wu + customer wu) / open_booths
 
 
 def wu_to_hours(wu_input):
-    hours = wu_input / 10
+    hours = wu_input / wu
     print("\t", wu_input, "wu is", hours, "hours")
 
 
 def _wu_to_hours(wu_input):
-    hours = wu_input / 10
+    hours = wu_input / wu
     return hours
 
 
