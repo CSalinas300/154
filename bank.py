@@ -1,11 +1,11 @@
 import enum
 import queue
-import random
 import numpy
 import numpy as np
+from matplotlib.pyplot import bar
 
 from scipy import stats
-from matplotlib import pyplot as plt
+from matplotlib import pyplot as plt, transforms
 
 
 class Customer:
@@ -17,8 +17,63 @@ class Customer:
         """Customer's work unit"""
         self.wu = work_unit
 
+    """This is used to compare priority (order) inside the priority queue"""
+    def __lt__(self, other):
+        self_priority = (self.id, self.wu)
+        other_priority = (other.id, other.wu)
+        return self_priority < other_priority
+
     def get_wu(self):
         return self.wu
+
+
+class EventModel:
+    def __init__(self):
+        self.id = None
+        self.arrival = None
+        self.exit = None
+        self.work_time = None
+        self.event_list = []
+
+    def add(self, id_, arrival_, work_, exit_):
+        self.id = id_
+        self.arrival = arrival_
+        self.work_time = work_
+        self.exit = exit_
+        self.event_list.append(self)
+
+    def print_all(self):
+        for i in self.event_list:
+            print("Customer", i.id, "\b) Arrival:", round(i.arrival, 3),
+                  "Booth Time:", round(i.work_time, 3),
+                  "Leave", round(i.arrival + i.work_time, 3))
+
+    def print_current(self):
+        print("Customer", self.id, "\b) Arrival:", round(self.arrival, 3),
+              "Booth Time:", round(self.work_time, 3),
+              "Leave", round(self.arrival + self.work_time, 3))
+
+
+class InOutEvent:
+    def __init__(self, print_bool):
+        self.finish = 0.0
+        self.start = 0.0
+        self.offset = 0.0
+        self.customer = None
+        self.average = 0.0
+        self.print = print_bool
+        self.event_model = EventModel()
+
+    def add_event(self, customer, entry):
+        self.customer = customer
+        self.finish = customer.get_wu() + wu
+        self.start = entry
+        self.event_model.add(self.customer.id, self.start, self.next_event(), self.next_event() + self.start)
+        if self.print:
+            self.event_model.print_current()
+
+    def next_event(self):
+        return self.finish
 
 
 class BoothState(enum.Enum):
@@ -29,11 +84,13 @@ class BoothState(enum.Enum):
 class Bank:
     """Bank model"""
 
-    def __init__(self, booth_id, customer, speed, state):
+    def __init__(self, booth_id, customer, speed, timer, state):
         self.id = booth_id
         self.customer = customer
         self.speed = speed
         self.state = state
+        self.start_customer = timer
+        self.finish_customer = timer
 
     def booth_available(self):
         return self.state == BoothState.Idle
@@ -46,7 +103,11 @@ class Bank:
 
     def help_customer(self, customer):
         self.customer = customer
+        self.finish_customer += customer.wu + wu
         self.change_state(BoothState.Busy)
+
+    def update_booth(self):
+        self.change_state(BoothState.Idle)
 
     def get_wu(self):
         return self.speed
@@ -62,9 +123,9 @@ class CustomerListPQ:
         self.q = queue.PriorityQueue()
 
     def add_customer(self, customer):
-        """Adding a customer to a PQ use the work unit and id for sorting"""
-        self.q.put(customer.get_wu(), customer.id, customer)
-        self.list.append(customer.get_wu())
+        """Adding a customer to a PQ"""
+        self.q.put(customer)
+        self.list.append(customer)
 
     def get_customer(self):
         if not self.q.empty():
@@ -77,8 +138,8 @@ class CustomerListPQ:
         return self.q
 
     def print(self):
-        for i in self.list:
-            print(i)
+        for i1 in self.list:
+            print(i1)
 
     def size(self):
         return len(self.list)
@@ -117,16 +178,12 @@ class CustomerList:
 
 
 class Questions:
-    """Question class"""
+    """Question variables"""
 
     def __init__(self):
-        self.average_wait_time = None
-        self.average_wait_time_extra = None
-        self.average_wait_time_less = None
         self.customers_not_served_today = None
         self.days_to_finish_customer_160 = None
-        self.wait_to_finish_booth_160 = None
-        self.total_time = None
+        self.average = None
 
 
 def generate_priority_queue(n):
@@ -137,7 +194,6 @@ def generate_priority_queue(n):
     _list = n
     for i in range(0, _list.size()):
         new_customer = _list.get_customer()
-        new_customer.wu = generate_gaussian_wu(c_mean, c_std)
         # print("Adding customer", new_customer.id, "wu ->", new_customer.get_wu())
         pq.add_customer(new_customer)
     return pq
@@ -157,8 +213,9 @@ def generate_queue(n):
     """
     qq = CustomerList()
     for i in range(0, n):
-        # Adding customer to a normal queue with a worker unit of 0 as "unknown"
-        new_customer = Customer(i, 0)
+        # Adding customer to a normal queue with a known worker unit ~N(5, 0.5)
+        c_wu = generate_gaussian_wu(c_mean, c_std)
+        new_customer = Customer(i, c_wu)
         qq.add_customer(new_customer)
     return qq
 
@@ -166,40 +223,9 @@ def generate_queue(n):
 def generate_booths(n, worker_unit):
     booth_instances = []
     for i in range(0, n):
-        booth = Bank(booth_id=i, customer=-1, speed=worker_unit, state=BoothState.Idle)
+        booth = Bank(booth_id=i, customer=-1, speed=worker_unit, timer=0, state=BoothState.Idle)
         booth_instances.append(booth)
     return booth_instances
-
-
-def average_wait_time(pq, b, _booth_instance):
-    # Total average wait time in 8 hours
-    total_average = 0
-    time_multiplier = pq.size() / b  # use for multiplying time
-    start_multiplier = 1
-    while pq.size() != 0:
-        '''Wait time for each customer rush of 5-15'''
-        wait_time = 0
-        '''Process all of the customers in the PQ'''
-        # wait time is returned from the function
-        if pq.size() > b:
-            wait_time += process_customers(size=b, booth_list=_booth_instance, qq=pq)
-        else:
-            wait_time += process_customers(size=pq.size(), booth_list=_booth_instance, qq=pq)
-        # todo add waiting time to people in queue
-        # print("Average wait time for ", b, "customers:", wait_time, "wu")
-        # customers not served today
-        if total_average / b <= wu*8:
-            question.customers_not_served_today = pq.size()
-        if time_multiplier > start_multiplier:
-            # todo fix this?
-            if time_multiplier - start_multiplier < 1:
-                total_average += wait_time * start_multiplier
-            else:
-                total_average += wait_time * start_multiplier
-            start_multiplier += 1
-    print("\tTotal average wait time:", total_average / customers, "wu")
-    question.total_time = total_average
-    return total_average / customers
 
 
 def get_normal_distribution(x, mean, sd):
@@ -215,32 +241,33 @@ def get_dist_output():
     return dist
 
 
-def process_customers(size, booth_list, qq):
-    c_wu = 0
-    b_wu = 0
-    open_booths = size
-
-    while size != 0:
-        for i in range(0, size):
-            if booth_list[i].booth_available():
+def process_customer_queue(qq, booth_list, work_units, events):
+    while qq.size() != 0:
+        for i in range(0, len(booth_list)):
+            if booth_list[i].booth_available() and qq.size() > 0:
                 customer = qq.get_customer()
                 booth_list[i].help_customer(customer)
-                b_wu += booth_list[i].get_wu()
-                c_wu += customer
-                # print("Customer:", customer, "loop size:", size)
-                size -= 1  # subtract 1 from size
+                events.add_event(customer, booth_list[i].start_customer)
+                booth_list[i].start_customer += events.next_event()
+                if events.offset <= work_units * work_hours:
+                    question.customers_not_served_today = qq.size()
             else:
-                booth_list[i].change_state(BoothState.Idle)
-    return b_wu + c_wu / open_booths  # return the sum of (booth wu + customer wu) / open_booths
+                booth_list[i].update_booth()
+                if events.offset <= work_units * work_hours:
+                    question.customers_not_served_today = qq.size()
+        if booth_list[0].booth_busy():
+            events.offset += events.next_event()
+            events.average += events.start
+    question.days_to_finish_customer_160 = events.offset
+    question.average = events.average
+    print("\tTime to finish all events:", round(_wu_to_hours(events.offset, work_units), 3),
+          "hours\n\tAverage customer wait time:",
+          round(_wu_to_hours(events.average/customers, work_units), 3), "hours")
+    print("\tCustomers not served today ("+work_hours.__str__()+" hour shift):", question.customers_not_served_today)
 
 
-def wu_to_hours(wu_input):
-    hours = wu_input / wu
-    print("\t", wu_input, "wu is", hours, "hours")
-
-
-def _wu_to_hours(wu_input):
-    hours = wu_input / wu
+def _wu_to_hours(wu_input, wu_efficiency):
+    hours = wu_input / wu_efficiency
     return hours
 
 
@@ -249,7 +276,7 @@ def normal_dist(x, mean, sd):
     return prob_density
 
 
-def plot_graph():
+def plot_dist_graph():
     # Creating a series of data of in range of [5-15].
     x = np.linspace(5, 15, 200)
 
@@ -260,20 +287,69 @@ def plot_graph():
     mean = 5
     sd = 0.5
 
-    # Apply function to data
+    # Generate PDF
     pdf = normal_dist(x, mean, sd)
 
     # Plot
     plt.plot(x, pdf, color='red')
-    plt.xlabel('Data points')
+    plt.xlabel('~N(5, 0.5)')
     plt.ylabel('Probability Density')
+    plt.show()
+
+
+def plot_graph():
+    # Creating a series of data of in range of [5-15].
+    bar(booth_count, time_taken, width=0.8, bottom=None)
+    plt.axhline(np.mean(time_taken), color='k', linestyle='dashed', linewidth=1)
+    plt.text(161, np.mean(time_taken), "{:.0f}".format(np.mean(time_taken)), color="red", ha="right", va="center")
+    plt.xlabel('Booth Count')
+    plt.ylabel('Time taken (hours)')
+    plt.show()
+
+
+def plot_wu_graph():
+    # Creating a series of data of in range of [5-15].
+    bar(wu_val, time_taken, width=0.8, bottom=None)
+    plt.axhline(np.mean(time_taken), color='k', linestyle='dashed', linewidth=1)
+    plt.text(250, np.mean(time_taken), "{:.0f}".format(np.mean(time_taken)), color="red", ha="right", va="center")
+    plt.xlabel('Booth Worker Unit Efficiency')
+    plt.ylabel('Time taken (hours)')
+    plt.show()
+
+
+def simulate_bank(customers_, booths_, work_units_, print_message_, print_bool_):
+    """Simulate a bank"""
+
+    '''Create the booths'''
+    booth_instance_ = generate_booths(booths_, worker_unit=work_units_)
+
+    '''Handle customer entry and exit events'''
+    events_ = InOutEvent(print_bool_)
+
+    '''Add all customers to a queue'''
+    fifo_queue = generate_queue(customers_)
+
+    '''Handle events for all customers'''
+    priority_queue = generate_priority_queue(fifo_queue)
+
+    '''Print messages and process the queue'''
+    print(print_message_)
+    process_customer_queue(priority_queue, booth_instance_, work_units_, events_)
 
 
 if __name__ == '__main__':
     '''Class container for question answers'''
     question = Questions()
 
-    '''How many total customers to process in a given (8 hour) day'''
+    '''Graph data arrays'''
+    time_taken = []
+    booth_count = []
+    wu_val = []
+
+    '''How many hours are in a work day'''
+    work_hours = 8
+
+    '''How many total customers to process in a work day'''
     customers = 160
 
     '''How many bank booths to use'''
@@ -286,101 +362,48 @@ if __name__ == '__main__':
     c_mean = 5
     c_std = 0.5
 
-    '''Create the booth instances'''
-    booth_instance = generate_booths(booths, worker_unit=wu)
+    '''Using 10 booths'''
+    simulate_bank(customers, booths, wu, "Using 10 booths", True)
 
-    '''Add all customers to a queue'''
-    s = generate_queue(customers)
+    '''Using 11 booths'''
+    simulate_bank(customers, booths+1, wu, "Using 11 booths", False)
 
-    '''Generate events for all customers'''
-    r = generate_priority_queue(s)
+    '''Using 9 booths'''
+    simulate_bank(customers, booths - 1, wu, "Using 9 booths", False)
 
-    '''Average wait time with 10 booths'''
-    print("Using 10 booths")
-    question.average_wait_time = average_wait_time(r, booths, booth_instance)
-    wu_to_hours(question.average_wait_time)
-    #######################################
-    '''Average wait time with 11 booths'''
-    #######################################
-    '''Create the booth instances'''
-    booth_instance = generate_booths(booths+1, worker_unit=wu)
-
-    '''Add all customers to a queue'''
-    s = generate_queue(customers)
-
-    '''Generate events for all customers'''
-    r = generate_priority_queue(s)
-    '''Average wait time with 11 booths'''
-    print("Using 11 booths")
-    question.average_wait_time_extra = average_wait_time(r, booths+1, booth_instance)
-    wu_to_hours(question.average_wait_time_extra)
-
-    #######################################
-    '''Average wait time with 9 booths'''
-    #######################################
-    '''Create the booth instances'''
-    booth_instance = generate_booths(booths-1, worker_unit=wu)
-
-    '''Add all customers to a queue'''
-    s = generate_queue(customers)
-
-    '''Generate events for all customers'''
-    r = generate_priority_queue(s)
-    '''Average wait time with 9 booths'''
-    print("Using 9 booths")
-    question.average_wait_time_less = average_wait_time(r, booths-1, booth_instance)
-    wu_to_hours(question.average_wait_time_less)
-
-    #######################################
     '''Separate priority queue for light requests?'''
-    #######################################
     # It's not worth it since the distribution of customer worker units is always between 4-6
+    plot_dist_graph()
+
+    '''How long would it take to serve 160 customers with 1 booth?'''
+    simulate_bank(customers, 1, wu, "Using 1 booth with " + customers.__str__() + " customers", False)
+    days = _wu_to_hours(question.days_to_finish_customer_160, wu) / work_hours
+    print("\tIt would take", round(days, 3), "days ("+work_hours.__str__()+" hour days) to finish the queue")
+
+    '''How long would it take to serve 160 customers with 160 booths?'''
+    simulate_bank(customers, 160, wu, "Using 160 booths", False)
+
+    '''Difference between increasing booths vs worker units?'''
+    simulate_bank(customers, booths, wu + 40, "Using 10 booths and 50wu", False)
+    simulate_bank(customers, booths + 40, wu, "Using 50 booths and 10wu", False)
+    simulate_bank(customers, booths, wu, "Using 10 booths and 10wu", False)
+
+    '''Generate Booth Graph Efficiency'''
+    for j in range(10, 161):
+        simulate_bank(customers, j, wu, "Using "+j.__str__()+" booths and 10wu", False)
+        time_taken.append(_wu_to_hours(question.average, wu))
+        booth_count.append(j)
+        wu_val.append(wu)
     plot_graph()
 
-    #######################################
-    '''How many customers are not served at all within an operating day?'''
-    #######################################
-    '''Create the booth instances'''
-    booth_instance = generate_booths(booths, worker_unit=wu)
-
-    '''Add all customers to a queue'''
-    s = generate_queue(customers)
-
-    '''Generate events for all customers'''
-    r = generate_priority_queue(s)
-    '''Customers not served today'''
-    print("Customers not served in 8 hours?")
-    print("\t", question.customers_not_served_today)
-
-    #######################################
-    '''How long would it take to serve 160 customers with 1 booth?'''
-    #######################################
-    '''Create the booth instances'''
-    booth_instance = generate_booths(1, worker_unit=wu)
-
-    '''Add all customers to a queue'''
-    s = generate_queue(customers)
-
-    '''Generate events for all customers'''
-    r = generate_priority_queue(s)
-    '''Average wait time with 9 booths'''
-    print("Using 1 booth with ", customers, "customers")
-    question.days_to_finish_customer_160 = average_wait_time(r, 1, booth_instance)
-    wu_to_hours(question.days_to_finish_customer_160)
-    days = _wu_to_hours(question.days_to_finish_customer_160) / 8
-    print("\tIt would take", days, "days to finish the queue")
-    #######################################
-    '''How long would it take to serve 160 customers with 160 booths?'''
-    #######################################
-    '''Create the booth instances'''
-    booth_instance = generate_booths(160, worker_unit=wu)
-
-    '''Add all customers to a queue'''
-    s = generate_queue(customers)
-
-    '''Generate events for all customers'''
-    r = generate_priority_queue(s)
-    '''Average wait time with 160 booths'''
-    print("Using 160 booths")
-    question.wait_to_finish_booth_160 = average_wait_time(r, 160, booth_instance)
-    wu_to_hours(question.wait_to_finish_booth_160)
+    '''Generate Worker Unit Efficiency'''
+    # Reset arrays
+    time_taken = []
+    booth_count = []
+    wu_val = []
+    for k in range(10, 250):
+        simulate_bank(customers, booths, k, "Using 10 booths and " + k.__str__()+"wu", False)
+        time_taken.append(_wu_to_hours(question.average, k))
+        booth_count.append(booths)
+        wu_val.append(k)
+    plot_wu_graph()
