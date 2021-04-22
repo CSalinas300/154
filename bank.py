@@ -1,11 +1,11 @@
 import enum
 import queue
+
 import numpy
 import numpy as np
+from matplotlib import pyplot as plt
 from matplotlib.pyplot import bar
-
 from scipy import stats
-from matplotlib import pyplot as plt, transforms
 
 
 class Customer:
@@ -298,7 +298,7 @@ def plot_dist_graph():
 
 
 def plot_graph():
-    # Creating a series of data of in range of [5-15].
+    # Create graph of increasing booths with a static 10wu
     bar(booth_count, time_taken, width=0.8, bottom=None)
     plt.axhline(np.mean(time_taken), color='k', linestyle='dashed', linewidth=1)
     plt.text(161, np.mean(time_taken), "{:.0f}".format(np.mean(time_taken)), color="red", ha="right", va="center")
@@ -308,7 +308,7 @@ def plot_graph():
 
 
 def plot_wu_graph():
-    # Creating a series of data of in range of [5-15].
+    # Create a graph of increasing booth wu with a static 10 booths
     bar(wu_val, time_taken, width=0.8, bottom=None)
     plt.axhline(np.mean(time_taken), color='k', linestyle='dashed', linewidth=1)
     plt.text(250, np.mean(time_taken), "{:.0f}".format(np.mean(time_taken)), color="red", ha="right", va="center")
